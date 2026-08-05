@@ -3,7 +3,9 @@
  * Generate an image from a text prompt via the OpenAI image API.
  *
  * Reads the prompt from a .txt file and saves the generated image as a PNG,
- * exactly as returned by the API — no resizing, no size caps.
+ * exactly as returned by the API — no resizing, no size caps. Optionally
+ * attaches one or more reference images, in which case the prompt is applied
+ * to them via the image edits endpoint.
  *
  * Requires OPENAI_API_KEY. Uses OpenAI's top image model (see OPENAI_MODEL
  * below); GPT Image models are paid-only and need org verification.
@@ -11,9 +13,11 @@
  * Usage:
  *   node generate_image.mjs --input prompt.txt                    # saves prompt.png
  *   node generate_image.mjs --input prompt.txt --output out.png   # custom output path
+ *   node generate_image.mjs --input prompt.txt --input-image ref.png
+ *   node generate_image.mjs --input prompt.txt --input-image a.png --input-image b.jpg
  */
 
-import { readFileSync, writeFileSync, statSync } from 'node:fs';
+import { readFileSync, writeFileSync, statSync, existsSync } from 'node:fs';
 import path from 'node:path';
 
 // gpt-image-2 is OpenAI's flagship image model (supersedes gpt-image-1.5 and
@@ -25,17 +29,19 @@ const OPENAI_MODEL = 'gpt-image-2';
 const argv = process.argv.slice(2);
 let input = null;
 let output = null;
+const inputImages = [];
 
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
   if (a === '--input' || a === '-i') input = argv[++i];
   else if (a === '--output' || a === '-o') output = argv[++i];
+  else if (a === '--input-image') inputImages.push(argv[++i]);
   else if (a === '--help' || a === '-h') { usage(); process.exit(0); }
   else { usage(); console.error(`\nError: unknown argument "${a}".`); process.exit(1); }
 }
 
 function usage() {
-  console.log('Usage: node generate_image.mjs --input <prompt.txt> [--output <image.png>]');
+  console.log('Usage: node generate_image.mjs --input <prompt.txt> [--output <image.png>] [--input-image <ref.png>]...');
 }
 
 if (!input) {
@@ -60,16 +66,43 @@ if (!prompt) {
   process.exit(1);
 }
 
+const missing = inputImages.filter((p) => !existsSync(p));
+if (missing.length) {
+  console.error(`Error: input image not found: ${missing.join(', ')}`);
+  process.exit(1);
+}
+
+const MIME = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp' };
+const mimeOf = (file) => MIME[path.extname(file).slice(1).toLowerCase()] ?? 'image/png';
+
 // ---------------------------------------------------------------- generation
+// With reference images we edit them; without any we generate from scratch.
 async function generate(prompt) {
-  const res = await fetch('https://api.openai.com/v1/images/generations', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: OPENAI_MODEL,
-      prompt,
-    }),
-  });
+  let res;
+  if (inputImages.length) {
+    const form = new FormData();
+    form.append('model', OPENAI_MODEL);
+    form.append('prompt', prompt);
+    // The edits endpoint takes a single file as `image`, or several as `image[]`.
+    const field = inputImages.length > 1 ? 'image[]' : 'image';
+    for (const file of inputImages) {
+      form.append(field, new Blob([readFileSync(file)], { type: mimeOf(file) }), path.basename(file));
+    }
+    res = await fetch('https://api.openai.com/v1/images/edits', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}` },
+      body: form,
+    });
+  } else {
+    res = await fetch('https://api.openai.com/v1/images/generations', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: OPENAI_MODEL,
+        prompt,
+      }),
+    });
+  }
   if (!res.ok) throw new Error(`OpenAI API ${res.status}: ${await res.text()}`);
   const json = await res.json();
   const b64 = json.data?.[0]?.b64_json;
@@ -78,7 +111,8 @@ async function generate(prompt) {
 }
 
 // ---------------------------------------------------------------- main
-process.stdout.write(`Generating from ${input} via ${OPENAI_MODEL}... `);
+const withRefs = inputImages.length ? ` with ${inputImages.length} reference image${inputImages.length > 1 ? 's' : ''}` : '';
+process.stdout.write(`Generating from ${input}${withRefs} via ${OPENAI_MODEL}... `);
 try {
   const image = await generate(prompt);
   writeFileSync(output, image);
