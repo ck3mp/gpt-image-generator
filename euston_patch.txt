@@ -1,0 +1,26 @@
+A patch design in the style of the classic NASA "meatball" insignia, but simplified,
+and reading "EUSTON" instead of "NASA". A clean flat vector illustration suitable for
+3D printing.
+
+Composition: a solid dark navy blue circular disc. Across the middle of the disc, the
+word "EUSTON" in bold white capital letters, in the same rounded retro lettering style
+as the NASA logotype, large and clearly legible. A red chevron swoosh sweeps across
+the disc behind the lettering, like the red vector wing of the NASA meatball. A single
+thin white elliptical orbit ring loops around the disc, crossing in front of and
+behind the lettering, with a small solid white dot on the ring representing a
+spacecraft. Scattered on the navy disc, at most three or four chunky four-pointed
+white stars, large and simple.
+
+Style: flat 2D vector emblem, bold thick outlines, large simple shapes, solid fills
+only. No gradients, no shading, no texture, no highlights, no 3D effects, no
+embroidery stitch texture. Every colour region must be a crisp solid area with clean
+edges, as if cut from sheets of coloured plastic. Less detailed than the real NASA
+meatball: fewer stars, thicker lines, simpler shapes.
+
+Palette: strictly limited to exactly three colours — dark navy blue, bright red, and
+pure white. No other colours anywhere in the design.
+
+Keep all details large and minimal: no text other than the single word "EUSTON",
+no tiny instruments, no fine lines thinner than a bold marker stroke, no small stars,
+no signatures, no watermarks, no outer glow, and nothing outside the circular disc.
+Plain solid white background behind the disc.
