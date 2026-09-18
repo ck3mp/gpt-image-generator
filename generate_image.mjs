@@ -15,20 +15,31 @@
  *   node generate_image.mjs --input prompt.txt --output out.png   # custom output path
  *   node generate_image.mjs --input prompt.txt --input-image ref.png
  *   node generate_image.mjs --input prompt.txt --input-image a.png --input-image b.jpg
+ *   node generate_image.mjs --input prompt.txt --model sunburst          # GPT Image 2.5 Sunburst
  */
 
 import { readFileSync, writeFileSync, statSync, existsSync } from 'node:fs';
 import path from 'node:path';
 
-// gpt-image-2 is OpenAI's flagship image model (supersedes gpt-image-1.5 and
-// gpt-image-1). Never omit `model`: the endpoint defaults to gpt-image-1.5,
-// not the newest. If this ID 404s, fall back to 'gpt-image-1.5' then 'gpt-image-1'.
-const OPENAI_MODEL = 'gpt-image-2';
+// gpt-image-2 is the default. Never omit `model`: the endpoint defaults to
+// gpt-image-1.5, not the newest. If this ID 404s, fall back to 'gpt-image-1.5'
+// then 'gpt-image-1'. Pass --model to pick another (short aliases below, or
+// any full OpenAI model ID such as 'gpt-image-2.5-sunburst-2026-09-08').
+const DEFAULT_MODEL = 'gpt-image-2';
+const MODEL_ALIASES = {
+  'gpt-image-2': 'gpt-image-2',
+  sunburst: 'gpt-image-2.5-sunburst',   // GPT Image 2.5 Sunburst
+  flare: 'gpt-image-2.5-flare',         // GPT Image 2.5 Flare
+  'gpt-image-1.5': 'gpt-image-1.5',
+  'gpt-image-1': 'gpt-image-1',
+};
 
 // ---------------------------------------------------------------- CLI args
 const argv = process.argv.slice(2);
 let input = null;
 let output = null;
+let size = null;
+let modelArg = null;
 const inputImages = [];
 
 for (let i = 0; i < argv.length; i++) {
@@ -36,13 +47,19 @@ for (let i = 0; i < argv.length; i++) {
   if (a === '--input' || a === '-i') input = argv[++i];
   else if (a === '--output' || a === '-o') output = argv[++i];
   else if (a === '--input-image') inputImages.push(argv[++i]);
+  else if (a === '--size' || a === '-s') size = argv[++i];
+  else if (a === '--model' || a === '-m') modelArg = argv[++i];
   else if (a === '--help' || a === '-h') { usage(); process.exit(0); }
   else { usage(); console.error(`\nError: unknown argument "${a}".`); process.exit(1); }
 }
 
 function usage() {
-  console.log('Usage: node generate_image.mjs --input <prompt.txt> [--output <image.png>] [--input-image <ref.png>]...');
+  console.log('Usage: node generate_image.mjs --input <prompt.txt> [--output <image.png>] [--size 1536x1024] [--model sunburst] [--input-image <ref.png>]...');
+  console.log('  --size: 1024x1024 (square), 1536x1024 (landscape), 1024x1536 (portrait). Default: API decides.');
+  console.log(`  --model: ${Object.keys(MODEL_ALIASES).join(', ')}, or any full OpenAI model ID. Default: ${DEFAULT_MODEL}.`);
 }
+
+const OPENAI_MODEL = modelArg ? (MODEL_ALIASES[modelArg] ?? modelArg) : DEFAULT_MODEL;
 
 if (!input) {
   usage();
@@ -83,6 +100,7 @@ async function generate(prompt) {
     const form = new FormData();
     form.append('model', OPENAI_MODEL);
     form.append('prompt', prompt);
+    if (size) form.append('size', size);
     // The edits endpoint takes a single file as `image`, or several as `image[]`.
     const field = inputImages.length > 1 ? 'image[]' : 'image';
     for (const file of inputImages) {
@@ -100,6 +118,7 @@ async function generate(prompt) {
       body: JSON.stringify({
         model: OPENAI_MODEL,
         prompt,
+        ...(size && { size }),
       }),
     });
   }
