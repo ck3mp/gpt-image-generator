@@ -7,7 +7,8 @@
  * attaches one or more reference images, in which case the prompt is applied
  * to them via the image edits endpoint.
  *
- * Requires OPENAI_API_KEY. Uses OpenAI's top image model (see OPENAI_MODEL
+ * Requires CROSSMOORE_OPENAI_API_KEY, taken from the environment if set,
+ * otherwise from the `secret` keychain CLI (one Touch ID prompt). Uses OpenAI's top image model (see OPENAI_MODEL
  * below); GPT Image models are paid-only and need org verification.
  *
  * Usage:
@@ -20,6 +21,10 @@
 
 import { readFileSync, writeFileSync, statSync, existsSync } from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
+
+// Read from the environment if set, otherwise from the `secret` keychain CLI.
+const API_KEY_NAME = 'CROSSMOORE_OPENAI_API_KEY';
 
 // gpt-image-2 is the default. Never omit `model`: the endpoint defaults to
 // gpt-image-1.5, not the newest. If this ID 404s, fall back to 'gpt-image-1.5'
@@ -71,12 +76,6 @@ if (!output) {
   output = path.join(path.dirname(input), `${path.basename(input, path.extname(input))}.png`);
 }
 
-const apiKey = process.env.OPENAI_API_KEY;
-if (!apiKey) {
-  console.error('Error: OPENAI_API_KEY is not set in the environment.');
-  process.exit(1);
-}
-
 const prompt = readFileSync(input, 'utf8').trim();
 if (!prompt) {
   console.error(`Error: ${input} is empty.`);
@@ -87,6 +86,27 @@ const missing = inputImages.filter((p) => !existsSync(p));
 if (missing.length) {
   console.error(`Error: input image not found: ${missing.join(', ')}`);
   process.exit(1);
+}
+
+// Fetched after input validation so bad args never trigger a Touch ID prompt.
+const apiKey = getSecret(API_KEY_NAME);
+
+// Env var first (CI, `secret exec`), otherwise one Touch ID–gated `secret get`.
+function getSecret(name) {
+  const fromEnv = process.env[name];
+  if (fromEnv) return fromEnv;
+  try {
+    const value = execFileSync('secret', ['get', name], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    if (!value) throw new Error('empty value');
+    return value;
+  } catch (err) {
+    const reason = err.stderr?.toString().trim() || err.message;
+    console.error(`Error: secret ${name} unavailable: ${reason}`);
+    process.exit(1);
+  }
 }
 
 const MIME = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp' };
